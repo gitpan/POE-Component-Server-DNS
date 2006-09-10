@@ -1,0 +1,17 @@
+# http://module-build.sourceforge.net/META-spec.html
+#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
+name:         POE-Component-Server-DNS
+version:      0.01
+version_from: lib/POE/Component/Server/DNS.pm
+installdirs:  site
+requires:
+    Carp:                          0
+    IO::Socket::INET:              0
+    Net::DNS:                      0.58
+    POE:                           0.3202
+    POE::Component::Client::DNS:   0.99
+    POE::Component::Generic:       0.0905
+    Socket:                        0
+
+distribution_type: module
+generated_by: ExtUtils::MakeMaker version 6.30

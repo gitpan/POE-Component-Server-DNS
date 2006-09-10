@@ -1,0 +1,13 @@
+Changes
+examples/simple.pl
+lib/POE/Component/Server/DNS.pm
+Makefile.PL
+MANIFEST
+README
+t/00_use.t
+t/01_pod.t
+t/02_pod_coverage.t
+t/03_resolve.t
+t/04_resolve_fo.t
+t/05_handlers.t
+META.yml                                 Module meta-data (added by MakeMaker)

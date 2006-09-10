@@ -1,0 +1,537 @@
+package POE::Component::Server::DNS;
+
+use strict;
+use POE qw(Component::Client::DNS Wheel::ReadWrite Component::Generic);
+use Socket;
+use Net::DNS::RR;
+use IO::Socket::INET;
+use vars qw($VERSION);
+
+$VERSION = '0.01';
+
+sub spawn {
+  my $package = shift;
+  my %args = @_;
+  $args{lc $_} = delete $args{$_} for keys %args;
+
+  my $options = delete $args{options};
+
+  $args{resolver_opts} = { } unless $args{resolver_opts} and ref $args{resolver_opts} eq 'HASH';
+
+  my $self = bless \%args, $package;
+
+  $self->{_handlers} = [ ];
+
+  delete $self->{resolver_opts}->{Alias};
+  $self->{resolver} = POE::Component::Client::DNS->spawn( Alias => "resolver" . $self->session_id(), %{ $self->{resolver_opts} } );
+
+  $self->{recursive} = POE::Component::Generic->spawn(
+	package => 'Net::DNS::Resolver::Recurse',
+	methods => [ qw(hints query_dorecursion) ],
+  );
+
+  $self->{_localhost} = Net::DNS::RR->new('localhost. 0 A 127.0.0.1');
+
+  $self->{session_id} = POE::Session->create(
+	object_states => [ 
+		$self => { shutdown => '_shutdown', },
+		$self => [ qw(_start _dns_incoming _dns_err _dns_response _dns_recursive _hints add_handler del_handler _handled_req) ],
+	],
+	heap => $self,
+	options => ( $options && ref $options eq 'HASH' ? $options : { } ),
+  )->ID();
+
+  return $self;
+}
+
+sub _start {
+  my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
+
+  $self->{session_id} = $session->ID();
+
+  if ( $self->{alias} ) {
+     $kernel->alias_set($self->{alias});
+  } else {
+     $kernel->alias_set("$self");
+     $self->{alias} = "$self";
+  }
+
+  $self->{recursive}->hints( { event => '_hints' } );
+
+  my $dns_socket = IO::Socket::INET->new(
+	    Proto => "udp",
+	    LocalPort => $self->{port} || 53,
+	) or die "Failed to create udp socket: $!\n";
+
+  $self->{dnsrw} = POE::Wheel::ReadWrite->new(
+	    Handle => $dns_socket,
+	    Driver => DNS::Driver::SendRecv->new(),
+	    Filter => DNS::Filter::UDPDNS->new(),
+
+	    InputEvent => '_dns_incoming',
+	    ErrorEvent => '_dns_err',
+	);
+  undef;
+}
+
+sub session_id {
+  return $_[0]->{session_id};
+}
+
+sub resolver {
+  return $_[0]->{resolver};
+}
+
+sub shutdown {
+  my $self = shift;
+  $poe_kernel->post( $self->session_id() => 'shutdown' );
+}
+
+sub _shutdown {
+  my ($kernel,$self) = @_[KERNEL,OBJECT];
+  $kernel->alarm_remove_all();
+  $kernel->alias_remove( $_ ) for $kernel->alias_list( $_[SESSION] );
+  delete $self->{dnsrw};
+  $self->{resolver}->shutdown();
+  $self->{recursive}->shutdown();
+  $kernel->refcount_decrement( $_->{session}, __PACKAGE__ ) for @{ $self->{_handlers} };
+  delete $self->{_handlers};
+  undef;
+}
+
+sub add_handler {
+  my ($kernel,$self,$sender) = @_[KERNEL,OBJECT,SENDER];
+  my $sender = $_[SENDER]->ID();
+
+  # Get the arguments
+  my $args;
+  if (ref($_[ARG0]) eq 'HASH') {
+	$args = { %{ $_[ARG0] } };
+  } else {
+	warn "first parameter must be a ref hash, trying to adjust. "
+		."(fix this to get rid of this message)";
+	$args = { @_[ARG0 .. $#_ ] };
+  }
+
+  $args->{ lc $_ } = delete $args->{$_} for keys %{ $args };
+
+  unless ( $args->{label} ) {
+	warn "you must supply a label argument, to make it unique\n";
+	return;
+  }
+
+  if ( grep { $_->{label} eq $args->{label} } @{ $self->{_handlers} } ) {
+	warn "you must supply a unique label argument, I already have that one\n";
+	return;
+  }
+
+  unless ( $args->{event} ) {
+	warn "you must supply an event argument, otherwise where do I send the replies to\n";
+	return;
+  }
+
+  unless ( $args->{match} ) {
+	warn "you must supply a match argument, otherwise what's the point\n";
+	return;
+  }
+
+  my $regex;
+  eval { $regex = qr/$args->{match}/ };
+
+  if ( $@ ) { 
+	warn "The match argument you supplied was fubar, please try harder\n";
+	return;
+  } else {
+	$args->{match} = $regex;
+  }
+
+  $args->{session} = $sender unless $args->{session};
+  if ( my $ref = $kernel->alias_resolve( $args->{session} ) ) {
+	$args->{session} = $ref->ID();
+  } else {
+	$args->{session} = $sender->ID();
+  }
+
+  $kernel->refcount_increment( $args->{session}, __PACKAGE__ );
+
+  push @{ $self->{_handlers} }, $args;
+
+  undef;
+}
+
+sub del_handler {
+  my ($kernel,$self,$label) = @_[KERNEL,OBJECT,ARG0];
+  return unless $label;
+  
+  my $i = 0; my $rec;
+  for ( @{ $self->{_handlers} } ) {
+    if ( $_->{label} eq $label ) {
+      splice( @{ $self->{_handlers} }, $i, 1 );
+      $rec = $_;
+      last;
+    }
+  }
+
+  $kernel->refcount_decrement( $rec->{session}, __PACKAGE__ );
+  undef;
+}
+
+sub _dns_incoming {
+  my($kernel,$self,$session,$dnsq) = @_[KERNEL,OBJECT,SESSION,ARG0];
+
+  my($q) = $dnsq->question();
+  return unless $q;
+
+  foreach my $handler ( @{ $self->{_handlers} } ) {
+	next unless $q->qname =~ $handler->{match};
+	my $callback = $session->callback( '_handled_req', $dnsq );
+	$kernel->post(
+			$handler->{session},
+			$handler->{event},
+			$q->qname,
+			$q->qclass,
+			$q->qtype,
+			$callback );
+	return;
+  }
+  
+  if ( $q->qname =~ /^localhost\.*$/i ) {
+	$dnsq->push( answer => $self->{_localhost} );
+  	$self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
+	return;
+  }
+
+  if ( $self->{forward_only} ) {
+    my %query = (
+      class   => $q->qclass,
+      type    => $q->qtype,
+      host    => $q->qname,
+      context => [ $dnsq->answerfrom, $dnsq->header->id ],   	   
+      event   => '_dns_response', 
+    );
+  
+    my $response = $self->{resolver}->resolve( %query );
+    $kernel->yield( '_dns_response', $response ) if $response;
+  
+  } else {
+    $self->{recursive}->query_dorecursion( { event => '_dns_recursive', data => [ $dnsq->answerfrom, $dnsq->header->id ], }, $q->qname, $q->qtype, $q->qclass );
+  }
+
+  undef;
+}
+
+sub _handled_req {
+  my ($kernel,$self,$passthru,$passback) = @_[KERNEL,OBJECT,ARG0,ARG1];
+  my $reply = $passthru->[0];
+  my ($rcode, $ans, $auth, $add, $headermask) = @{ $passback };
+  $reply->header->rcode($rcode);
+  $reply->push("answer",     @$ans)  if $ans;
+  $reply->push("authority",  @$auth) if $auth;
+  $reply->push("additional", @$add)  if $add;
+  if (!defined ($headermask)) {
+	$reply->header->ra(1);
+	$reply->header->ad(0);
+  } else {
+	$reply->header->aa(1) if $headermask->{'aa'};
+	$reply->header->ra(1) if $headermask->{'ra'};
+	$reply->header->ad(1) if $headermask->{'ad'};
+  }
+	
+  $reply->header->qr(1);
+  $self->{dnsrw}->put( $reply ) if $self->{dnsrw};
+  undef;
+}
+
+sub _dns_err {
+  my($kernel,$self, $op, $errnum, $errstr) = @_[KERNEL,OBJECT, ARG0..ARG2];
+  warn "DNS readwrite: $op generated error $errnum: $errstr\n";
+  $kernel->yield('shutdown');
+  undef;
+}
+
+sub _hints {
+  undef;
+}
+
+sub _dns_recursive {
+  my ($kernel,$self,$data,$response) = @_[KERNEL,OBJECT,ARG0..ARG1];
+  return if $data->{error};
+  my ($answerfrom,$id) = @{ $data->{data} };
+  $response->header->id( $id );
+  $response->answerfrom( $answerfrom );
+  $self->{dnsrw}->put( $response ) if $self->{dnsrw};
+  undef;
+}
+
+sub _dns_response {
+  my ($kernel,$self,$reply) = @_[KERNEL,OBJECT,ARG0];
+
+  my ($answerfrom,$id) = @{ $reply->{context} };
+  my $response = delete $reply->{response};
+  $response->header->id( $id );
+  $response->answerfrom( $answerfrom );
+  $self->{dnsrw}->put( $response ) if $self->{dnsrw};
+  undef;
+}
+
+package DNS::Driver::SendRecv;
+
+use strict;
+use POE::Driver;
+use Socket;
+
+sub new {
+    my $class = shift;
+    my $self = []; # the output queue
+    bless $self, $class;
+}
+
+sub get {
+    my $self = shift;
+    my $fh = shift;
+
+    my @ret;
+    while (1) {
+        my $from = recv($fh, my $buffer = '', 4096, MSG_DONTWAIT);
+        last if !$from;
+        push @ret, [ $from, $buffer ];
+    }
+    return if !@ret;
+    return \@ret;
+}
+
+sub put {
+    my $self = shift;
+    my $data = shift;
+
+    push @$self, @$data;
+    my $sum = 0;
+    $sum += length( $_->[1] ) for @$self;
+    return $sum;
+}
+
+sub flush {
+    my $self = shift;
+    my $fh = shift;
+
+    while ( @$self ) {
+        my $n = send($fh, $self->[0][1], MSG_DONTWAIT, $self->[0][0])
+            or return;
+        $n == length($self->[0][1])
+            or die "Couldn't write complete message to socket: $!\n";
+        shift @$self;
+    }
+}
+
+package DNS::Filter::UDPDNS;
+
+use strict;
+use POE::Filter;
+use Socket;
+use Net::DNS::Packet;
+
+sub new {
+    my $class = shift;
+    bless {}, $class;
+}
+
+sub get {
+    my $self = shift;
+    my $data = shift;
+
+    my @ret;
+    for my $d ( @$data ) {
+        ref($d) eq "ARRAY"
+            or die "UDPDNS filter expected arrayrefs for input\n";
+        my($port, $inet) = sockaddr_in($d->[0]);
+        my $inetstr = inet_ntoa($inet);
+        my($p, $err) = Net::DNS::Packet->new(\$d->[1]);
+        if ( !$p ) {
+            warn "Cannot create DNS question for packet received from " .
+                "$inetstr: $err\n";
+        } else {
+            $p->answerfrom("$inetstr:$port");
+            push @ret, $p;
+        }
+    }
+    return \@ret;
+}
+
+sub put {
+    my $self = shift;
+    my $data = shift;
+
+    my @ret;
+    for my $d ( @$data ) {
+        my($inetstr, $port) = split /:/, $d->answerfrom();
+        if ( !defined $port ) {
+            warn "answerfrom not set in DNS packet, no destination known\n";
+        } else {
+            push @ret,
+                [ pack_sockaddr_in($port, inet_aton($inetstr)), $d->data ];
+        }
+    }
+    return \@ret;
+}
+
+1;
+__END__
+
+=head1 NAME
+
+POE::Component::Server::DNS - non-blocking, concurrent DNS server component
+
+=head1 SYNOPSIS
+
+  use strict;
+  use Net::DNS::RR;
+  use POE qw(Component::Server::DNS);
+
+  my $dns_server = POE::Component::Server::DNS->spawn( alias => 'dns_server' );
+
+  POE::Session->create(
+        package_states => [ 'main' => [ qw(_start handler) ], ],
+  );
+
+  $poe_kernel->run();
+  exit 0;
+
+  sub _start {
+    my ($kernel,$heap) = @_[KERNEL,HEAP];
+    $kernel->post( 'dns_server', add_handler, 
+	{ 
+	  event => 'handler', 
+	  label => 'foobar', 
+	  match => 'foobar\.com$',
+        } 
+    );
+    undef;
+  }
+
+  sub handler {
+    my ($qname,$qclass,$qtype,$callback) = @_[ARG0..ARG3];
+    my ($rcode, @ans, @auth, @add);
+
+    if ($qtype eq "A") {
+      my ($ttl, $rdata) = (3600, "10.1.2.3");
+      push @ans, Net::DNS::RR->new("$qname $ttl $qclass $qtype $rdata");
+      $rcode = "NOERROR";
+    } else { 
+      $rcode = "NXDOMAIN";
+    }
+
+    $callback->($rcode, \@ans, \@auth, \@add, { aa => 1 });
+    undef;
+  }
+
+=head1 DESCRIPTION
+
+POE::Component::Server::DNS is a L<POE> component that implements a DNS server. 
+
+It uses L<POE::Component::Client::DNS> to handle resolving when configured as 'forward_only' and 
+L<Net::DNS::Resolver::Recurse> wrapped by L<POE::Component::Generic> to perform recursion.
+
+One may add handlers to massage and manipulate responses to particular queries which is vaguely modelled 
+after L<Net::DNS::Nameserver>.
+
+=head1 CONSTRUCTOR
+
+=over
+
+=item spawn
+
+Starts a POE::Component::Server::DNS component session and returns an object. Takes a number of optional arguments:
+
+  "alias", an alias to address the component by;
+  "port", which udp port to listen on. Default is 53, which requires 'root' privilege on UN*X type systems;
+  "resolver_opts", a set of options to pass to the POE::Component::Client::DNS constructor;
+  "forward_only", be a forwarding only DNS server. Default is 0, be recursive.
+
+=back
+
+=head1 METHODS
+
+These are methods that may be used with the object returned by spawn().
+
+=over
+
+=item session_id
+
+Returns the L<POE::Session> ID of the component's session.
+
+=item resolver
+
+Returns a reference to the L<POE::Component::Client::DNS> object.
+
+=item shutdown
+
+Terminates the component and associated resolver.
+
+=back
+
+=head1 INPUT EVENTS
+
+These are states that the component will accept:
+
+=over
+
+=item add_handler
+
+Accepts a hashref as an argument with the following keys:
+
+  "event", the event the component will post to, mandatory;
+  "label", a unique name for this handler, mandatory;
+  "match", a regex expression ( without // ) to match against the host part of queries, mandatory;
+  "session", the session where this handler event should be sent to, defaults to SENDER;
+
+
+See OUTPUT EVENTS for details of what happens when a handler is triggered.
+
+=item del_handler
+
+Accepts a handler label to remove.
+
+=item shutdown
+
+Terminates the component and associated resolver.
+
+=back
+
+=head1 OUTPUT EVENTS
+
+Events are triggered by a DNS query matching a handler. The applicable event is fired in the requested session
+with the following paramters:
+
+  ARG0, query name
+  ARG1, query class
+  ARG2, query type
+  ARG3, a callback coderef
+
+Do your manipulating then use the callback to fire the response back to the component, returning a
+response code and references to the answer, authority, and additional sections of the response. For advanced
+usage there is an optional argument containing an hashref with the settings for the aa, ra, and ad header bits. 
+The argument is of the form { ad => 1, aa => 0, ra => 1 }.
+
+  $callback->( $rcode, \@ans, \@auth, \@add, { aa => 1 } );
+
+=head1 HISTORY
+
+The component's genesis was inspired by Jan-Pieter's 'Fun with POE' talk at YAPC::EU 2006, which lay much of the 
+ground-work code such as the L<POE::Driver> and L<POE::Filter> used internally. BinGOs wrapped it all up in a
+component, added the tests ( borrowed shamelessly from L<POE::Component::Client::DNS>'s testsuite ) and documentation.
+
+Other suggestions as to the API were provided by Ben 'integral' Smith.
+
+Rocco Caputo brought L<POE::Component::Client::DNS> to the party. 
+
+=head1 AUTHORS
+
+Chris 'BinGOs' Williams
+
+Jan-Pieter Cornet
+
+=head1 SEE ALSO
+
+L<POE::Component::Client::DNS>
+
+L<POE::Component::Generic>
