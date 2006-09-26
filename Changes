@@ -1,0 +1,5 @@
+POE::Component::Server::DNS
+===========================
+
+0.02    Tue Sep 26 12:06:28 BST 2006
+        - Switched to Module::Install
