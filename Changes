@@ -1,6 +1,9 @@
 POE::Component::Server::DNS
 ===========================
 
+0.04	Sun Jan 07 18:29:34 GMT 2006
+	- Forgot to document LOG EVENTS. Doh.
+
 0.03	Sun Jan 07 18:21:57 GMT 2006
 	- handler events now have the IP:port of the requestor as ARG4;
 	- added log_event. This and the above were suggested by Fosforo;

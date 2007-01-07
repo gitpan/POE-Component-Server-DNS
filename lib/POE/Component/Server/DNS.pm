@@ -7,7 +7,7 @@ use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 sub spawn {
   my $package = shift;
@@ -563,7 +563,7 @@ Terminates the component and associated resolver.
 
 =head1 HANDLER EVENTS
 
-Events are triggered by a DNS query matching a handler. The applicable event is fired in the requested session
+These events are triggered by a DNS query matching a handler. The applicable event is fired in the requested session
 with the following paramters:
 
   ARG0, query name
@@ -578,6 +578,15 @@ usage there is an optional argument containing an hashref with the settings for 
 The argument is of the form { ad => 1, aa => 0, ra => 1 }.
 
   $callback->( $rcode, \@ans, \@auth, \@add, { aa => 1 } );
+
+=head1 LOG EVENTS
+
+These events are triggered whenever a DNS response is sent to a client. 
+
+  ARG0, the IP address and port of the requestor, 'IPaddr:port';
+  ARG1, the Net::DNS::Packet object;
+
+See L<Net::DNS::Packet> for details.
 
 =head1 HISTORY
 
@@ -600,3 +609,7 @@ Jan-Pieter Cornet
 L<POE::Component::Client::DNS>
 
 L<POE::Component::Generic>
+
+L<Net::DNS>
+
+L<Net::DNS::Packet>
