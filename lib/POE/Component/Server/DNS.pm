@@ -1,13 +1,13 @@
 package POE::Component::Server::DNS;
 
 use strict;
-use POE qw(Component::Client::DNS Wheel::ReadWrite Component::Generic);
+use POE qw(Component::Client::DNS Wheel::ReadWrite Component::Generic Wheel::SocketFactory);
 use Socket;
 use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 sub spawn {
   my $package = shift;
@@ -35,7 +35,7 @@ sub spawn {
   $self->{session_id} = POE::Session->create(
 	object_states => [ 
 		$self => { shutdown => '_shutdown', },
-		$self => [ qw(_start _dns_incoming _dns_err _dns_response _dns_recursive _hints add_handler del_handler _handled_req) ],
+		$self => [ qw(_start _dns_incoming _dns_err _dns_response _dns_recursive _hints add_handler del_handler _handled_req _sock_up _sock_err log_event) ],
 	],
 	heap => $self,
 	options => ( $options && ref $options eq 'HASH' ? $options : { } ),
@@ -58,19 +58,33 @@ sub _start {
 
   $self->{recursive}->hints( { event => '_hints' } );
 
-  my $dns_socket = IO::Socket::INET->new(
-	    Proto => "udp",
-	    LocalPort => $self->{port} || 53,
-	) or die "Failed to create udp socket: $!\n";
+  $self->{factory} = POE::Wheel::SocketFactory->new(
+	SocketProtocol => 'udp',
+	BindPort => $self->{port} || 53,
+	SuccessEvent   => '_sock_up',
+	FailureEvent   => '_sock_err',
+  );
 
+  undef;
+}
+
+sub _sock_up {
+  my ($kernel,$self,$dns_socket) = @_[KERNEL,OBJECT,ARG0];
+  delete $self->{factory};
   $self->{dnsrw} = POE::Wheel::ReadWrite->new(
 	    Handle => $dns_socket,
 	    Driver => DNS::Driver::SendRecv->new(),
 	    Filter => DNS::Filter::UDPDNS->new(),
-
 	    InputEvent => '_dns_incoming',
 	    ErrorEvent => '_dns_err',
 	);
+  undef;
+}
+
+sub _sock_err {
+  my ($operation, $errnum, $errstr, $wheel_id) = @_[ARG0..ARG3];
+  delete $_[OBJECT]->{factory};
+  die "Wheel $wheel_id generated $operation error $errnum: $errstr\n";
   undef;
 }
 
@@ -95,8 +109,29 @@ sub _shutdown {
   $self->{resolver}->shutdown();
   $self->{recursive}->shutdown();
   $kernel->refcount_decrement( $_->{session}, __PACKAGE__ ) for @{ $self->{_handlers} };
+  $kernel->refcount_decrement( $_, __PACKAGE__ ) for keys %{ $self->{_sessions} };
   delete $self->{_handlers};
   undef;
+}
+
+sub log_event {
+  my ($kernel,$self,$sender,$event) = @_[KERNEL,OBJECT,SENDER,ARG0];
+  $sender = $sender->ID();
+
+  if ( exists $self->{_sessions}->{ $sender } and !$event ) {
+	delete $self->{_sessions}->{ $sender };
+	$kernel->refcount_decrement( $sender => __PACKAGE__ );
+	return;
+  }
+  
+  if ( exists $self->{_sessions}->{ $sender } ) {
+	$self->{_sessions}->{ $sender } = $event;
+	return;
+  }
+
+  $self->{_sessions}->{ $sender } = $event;
+  $kernel->refcount_increment( $sender => __PACKAGE__ );
+  return;
 }
 
 sub add_handler {
@@ -191,12 +226,14 @@ sub _dns_incoming {
 			$q->qname,
 			$q->qclass,
 			$q->qtype,
-			$callback );
+			$callback,
+			$dnsq->answerfrom );
 	return;
   }
   
   if ( $q->qname =~ /^localhost\.*$/i ) {
 	$dnsq->push( answer => $self->{_localhost} );
+	$self->_dispatch_log( $dnsq );
   	$self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
 	return;
   }
@@ -238,6 +275,7 @@ sub _handled_req {
   }
 	
   $reply->header->qr(1);
+  $self->_dispatch_log( $reply );
   $self->{dnsrw}->put( $reply ) if $self->{dnsrw};
   undef;
 }
@@ -259,6 +297,7 @@ sub _dns_recursive {
   my ($answerfrom,$id) = @{ $data->{data} };
   $response->header->id( $id );
   $response->answerfrom( $answerfrom );
+  $self->_dispatch_log( $response );
   $self->{dnsrw}->put( $response ) if $self->{dnsrw};
   undef;
 }
@@ -270,8 +309,17 @@ sub _dns_response {
   my $response = delete $reply->{response};
   $response->header->id( $id );
   $response->answerfrom( $answerfrom );
+  $self->_dispatch_log( $response );
   $self->{dnsrw}->put( $response ) if $self->{dnsrw};
   undef;
+}
+
+sub _dispatch_log {
+  my $self = shift;
+  my $packet = shift || return;
+  my $af = $packet->answerfrom;
+  $poe_kernel->post( $_, $self->{_sessions}->{$_}, $af, $packet ) for keys %{ $self->{_sessions} };
+  return 1;
 }
 
 package DNS::Driver::SendRecv;
@@ -292,7 +340,7 @@ sub get {
 
     my @ret;
     while (1) {
-        my $from = recv($fh, my $buffer = '', 4096, MSG_DONTWAIT);
+        my $from = recv($fh, my $buffer = '', 4096, 0 );
         last if !$from;
         push @ret, [ $from, $buffer ];
     }
@@ -315,7 +363,7 @@ sub flush {
     my $fh = shift;
 
     while ( @$self ) {
-        my $n = send($fh, $self->[0][1], MSG_DONTWAIT, $self->[0][0])
+        my $n = send($fh, $self->[0][1], 0, $self->[0][0])
             or return;
         $n == length($self->[0][1])
             or die "Couldn't write complete message to socket: $!\n";
@@ -390,7 +438,7 @@ POE::Component::Server::DNS - non-blocking, concurrent DNS server component
   my $dns_server = POE::Component::Server::DNS->spawn( alias => 'dns_server' );
 
   POE::Session->create(
-        package_states => [ 'main' => [ qw(_start handler) ], ],
+        package_states => [ 'main' => [ qw(_start handler log) ], ],
   );
 
   $poe_kernel->run();
@@ -398,6 +446,11 @@ POE::Component::Server::DNS - non-blocking, concurrent DNS server component
 
   sub _start {
     my ($kernel,$heap) = @_[KERNEL,HEAP];
+
+    # Tell the component that we want log events to go to 'log'
+    $kernel->post( 'dns_server', 'log_event', 'log' );
+
+    # register a handler for any foobar.com suffixed domains
     $kernel->post( 'dns_server', add_handler, 
 	{ 
 	  event => 'handler', 
@@ -421,6 +474,12 @@ POE::Component::Server::DNS - non-blocking, concurrent DNS server component
     }
 
     $callback->($rcode, \@ans, \@auth, \@add, { aa => 1 });
+    undef;
+  }
+
+  sub log {
+    my ($ip_port,$net_dns_packet) = @_[ARG0..ARG1];
+    $net_dns_packet->print();
     undef;
   }
 
@@ -491,13 +550,18 @@ See OUTPUT EVENTS for details of what happens when a handler is triggered.
 
 Accepts a handler label to remove.
 
+=item log_event
+
+Tells the component that a session wishes to receive or stop receiving DNS log events. Specify the event you
+wish to receive log events as the first argument. If no event is specified you stop receiving log events.
+
 =item shutdown
 
 Terminates the component and associated resolver.
 
 =back
 
-=head1 OUTPUT EVENTS
+=head1 HANDLER EVENTS
 
 Events are triggered by a DNS query matching a handler. The applicable event is fired in the requested session
 with the following paramters:
@@ -506,6 +570,7 @@ with the following paramters:
   ARG1, query class
   ARG2, query type
   ARG3, a callback coderef
+  ARG4, the IP address and port of the requestor, 'IPaddr:port'
 
 Do your manipulating then use the callback to fire the response back to the component, returning a
 response code and references to the answer, authority, and additional sections of the response. For advanced

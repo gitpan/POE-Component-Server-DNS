@@ -6,9 +6,9 @@
 
 use strict;
 use POE qw(Component::Client::DNS Component::Server::DNS);
-use Test::More tests => 4;
+use Test::More tests => 2;
 
-my $server = POE::Component::Server::DNS->spawn( port => 5353 );
+my $server = POE::Component::Server::DNS->spawn( port => 5353, options => { trace => 0 } );
 
 my $resolver = POE::Component::Client::DNS->spawn(
   Alias   => 'named',
@@ -24,6 +24,7 @@ POE::Session->create(
     _start   => \&start_tests,
     _stop    => sub { }, # avoid assert problems
     response => \&got_response,
+    log	     => \&got_log,
   }
 );
 
@@ -31,45 +32,29 @@ POE::Kernel->run();
 exit;
 
 sub start_tests {
-  $_[HEAP]->{requests} = 4;
-  my $request = 1;
-
-  # Default IN A.  Override timeout.
-  $resolver->resolve(
-    event   => "response",
-    host    => "localhost",
-    context => $request++,
-    timeout => 30,
-  );
+  $poe_kernel->call( $server->session_id(), 'log_event', 'log' );
 
   # Default IN A.  Not found in /etc/hosts.
   $resolver->resolve(
     event   => "response",
     host    => "google.com",
-    context => $request++,
+    context => 1,
     timeout => 30,
   );
 
-  # IN PTR
-  $resolver->resolve(
-    event   => "response",
-    host    => "127.0.0.1",
-    class   => "IN",
-    type    => "PTR",
-    context => $request++,
-  );
-
-  # Small timeout.
-  $resolver->resolve(
-    event   => "response",
-    host    => "google.com",
-    context => $request++,
-    timeout => 0.001,
-  );
+  return;
 }
 
 sub got_response {
   my ($request, $response) = @_[ARG0, ARG1];
   ok($request->{context}, "got response $request->{context} for $request->{host}");
-  $poe_kernel->post( $server->session_id, 'shutdown' ) if $_[HEAP]->{requests}-- <= 1;
+  $poe_kernel->post( $server->session_id, 'shutdown' );
+  return;
+}
+
+sub got_log {
+  my ($af,$packet) = @_[ARG0..ARG1];
+  pass("Log event: $af");
+  $packet->print;
+  return;
 }

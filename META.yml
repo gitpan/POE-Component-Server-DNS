@@ -2,7 +2,6 @@ author: Chris Williams <chris@bingosnet.co.uk>
 distribution_type: module
 generated_by: Module::Install version 0.64
 license: perl
-module_name: POE::Component::Server::DNS
 name: POE-Component-Server-DNS
 no_index: 
   directory: 
@@ -10,10 +9,9 @@ no_index:
     - t
 requires: 
   Carp: 0
-  IO::Socket::INET: 0
   Net::DNS: 0.58
-  POE: 0.3202
-  POE::Component::Client::DNS: 0.99
-  POE::Component::Generic: 0.0905
+  POE: 0.38
+  POE::Component::Client::DNS: 1
+  POE::Component::Generic: 0.091
   Socket: 0
-version: 0.02
+version: 0.03

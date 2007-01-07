@@ -17,7 +17,7 @@ my $resolver = POE::Component::Client::DNS->spawn(
 );
 
 # This is so hacky.
-$resolver->[3]->port(5353);
+$resolver->get_resolver->port(5353);
 
 POE::Session->create(
   inline_states  => {
