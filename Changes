@@ -1,6 +1,9 @@
 POE::Component::Server::DNS
 ===========================
 
+0.05	Fri Feb 16 15:34:18 GMT 2007
+	- Added Kwalitee Test.
+
 0.04	Sun Jan 07 18:29:34 GMT 2006
 	- Forgot to document LOG EVENTS. Doh.
 
