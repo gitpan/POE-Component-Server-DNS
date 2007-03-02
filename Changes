@@ -1,6 +1,11 @@
 POE::Component::Server::DNS
 ===========================
 
+0.06	Fri Mar 02 10:25:43 GMT 2007
+	- Applied patch from Brandon Black that adds bind address.
+	- Added sockport() method to obtain the listening socket port.
+	- Refactored tests to use a randomly assigned port to fix RT#25244
+
 0.05	Fri Feb 16 15:34:18 GMT 2007
 	- Added Kwalitee Test.
 

@@ -9,7 +9,7 @@ use POE qw(Component::Client::DNS Component::Server::DNS);
 use Net::DNS::RR;
 use Test::More tests => 4;
 
-my $server = POE::Component::Server::DNS->spawn( port => 5353 );
+my $server = POE::Component::Server::DNS->spawn( port => 0 );
 
 my $resolver = POE::Component::Client::DNS->spawn(
   Alias   => 'named',
@@ -18,7 +18,6 @@ my $resolver = POE::Component::Client::DNS->spawn(
 );
 
 # This is so hacky.
-$resolver->get_resolver()->port(5353);
 
 POE::Session->create(
   inline_states  => {
@@ -35,11 +34,13 @@ exit;
 
 sub setup {
   $poe_kernel->post( $server->session_id() => add_handler => { label => 'test', match => '\.com$', event => 'handler' } );
-  $poe_kernel->yield( 'go' );
+  $poe_kernel->delay( 'go', 5 );
   undef;
 }
 
 sub start_tests {
+  my $port = $server->sockport();
+  $resolver->get_resolver()->port($port);
   $_[HEAP]->{requests} = 4;
   my $request = 1;
 

@@ -8,7 +8,7 @@ use strict;
 use POE qw(Component::Client::DNS Component::Server::DNS);
 use Test::More tests => 2;
 
-my $server = POE::Component::Server::DNS->spawn( port => 5353, options => { trace => 0 } );
+my $server = POE::Component::Server::DNS->spawn( port => 0, options => { trace => 0 } );
 
 my $resolver = POE::Component::Client::DNS->spawn(
   Alias   => 'named',
@@ -17,11 +17,11 @@ my $resolver = POE::Component::Client::DNS->spawn(
 );
 
 # This is so hacky.
-$resolver->get_resolver()->port(5353);
 
 POE::Session->create(
   inline_states  => {
-    _start   => \&start_tests,
+    _start   => \&_start,
+    _go      => \&start_tests,
     _stop    => sub { }, # avoid assert problems
     response => \&got_response,
     log	     => \&got_log,
@@ -31,8 +31,15 @@ POE::Session->create(
 POE::Kernel->run();
 exit;
 
-sub start_tests {
+sub _start {
   $poe_kernel->call( $server->session_id(), 'log_event', 'log' );
+  $poe_kernel->delay( '_go', 5 );
+  return;
+}
+
+sub start_tests {
+  my $port = $server->sockport();
+  $resolver->get_resolver()->port($port);
 
   # Default IN A.  Not found in /etc/hosts.
   $resolver->resolve(

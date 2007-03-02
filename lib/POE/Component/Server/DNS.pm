@@ -7,7 +7,7 @@ use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 sub spawn {
   my $package = shift;
@@ -60,7 +60,8 @@ sub _start {
 
   $self->{factory} = POE::Wheel::SocketFactory->new(
 	SocketProtocol => 'udp',
-	BindPort => $self->{port} || 53,
+	BindAddress => $self->{address} || INADDR_ANY,
+	BindPort => ( defined $self->{port} ? $self->{port} : 53 ),
 	SuccessEvent   => '_sock_up',
 	FailureEvent   => '_sock_err',
   );
@@ -70,6 +71,7 @@ sub _start {
 
 sub _sock_up {
   my ($kernel,$self,$dns_socket) = @_[KERNEL,OBJECT,ARG0];
+  $self->{_sockport} = ( sockaddr_in( getsockname($dns_socket) ) )[0];
   delete $self->{factory};
   $self->{dnsrw} = POE::Wheel::ReadWrite->new(
 	    Handle => $dns_socket,
@@ -94,6 +96,10 @@ sub session_id {
 
 sub resolver {
   return $_[0]->{resolver};
+}
+
+sub sockport {
+  return $_[0]->{_sockport};
 }
 
 sub shutdown {
@@ -503,6 +509,7 @@ Starts a POE::Component::Server::DNS component session and returns an object. Ta
 
   "alias", an alias to address the component by;
   "port", which udp port to listen on. Default is 53, which requires 'root' privilege on UN*X type systems;
+  "address", which local IP address to listen on.  Default is INADDR_ANY;
   "resolver_opts", a set of options to pass to the POE::Component::Client::DNS constructor;
   "forward_only", be a forwarding only DNS server. Default is 0, be recursive.
 
@@ -525,6 +532,10 @@ Returns a reference to the L<POE::Component::Client::DNS> object.
 =item shutdown
 
 Terminates the component and associated resolver.
+
+=item sockport
+
+Returns the port of the socket that the component is listening on.
 
 =back
 
