@@ -7,7 +7,7 @@ use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.06';
+$VERSION = '0.07';
 
 sub spawn {
   my $package = shift;
@@ -433,7 +433,7 @@ __END__
 
 =head1 NAME
 
-POE::Component::Server::DNS - non-blocking, concurrent DNS server component
+POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE component
 
 =head1 SYNOPSIS
 

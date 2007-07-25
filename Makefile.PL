@@ -3,6 +3,7 @@ name 'POE-Component-Server-DNS';
 author 'Chris Williams <chris@bingosnet.co.uk>';
 license 'perl';
 version_from 'lib/POE/Component/Server/DNS.pm';
+abstract_from 'lib/POE/Component/Server/DNS.pm';
 requires 'Carp' => 0;
 requires 'Socket' => 0;
 requires 'POE' => 0.38;
