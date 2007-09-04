@@ -1,6 +1,10 @@
 POE::Component::Server::DNS
 ===========================
 
+0.08	Tue Sep  4 10:21:13 BST 2007
+	- Applied a large patch from Brandon Black that supplies the 'no_clients'
+	option for disabling forwarding and recursion
+
 0.07	Wed Jul 25 11:44:27 BST 2007
 	- Fixed abstract_from in Makefile.PL
 

@@ -7,7 +7,7 @@ use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.07';
+$VERSION = '0.08';
 
 sub spawn {
   my $package = shift;
@@ -16,21 +16,23 @@ sub spawn {
 
   my $options = delete $args{options};
 
-  $args{resolver_opts} = { } unless $args{resolver_opts} and ref $args{resolver_opts} eq 'HASH';
-
   my $self = bless \%args, $package;
 
   $self->{_handlers} = [ ];
 
-  delete $self->{resolver_opts}->{Alias};
-  $self->{resolver} = POE::Component::Client::DNS->spawn( Alias => "resolver" . $self->session_id(), %{ $self->{resolver_opts} } );
+  unless ( $self->{no_clients} ) {
+      $self->{resolver_opts} = { } unless $self->{resolver_opts} and ref $self->{resolver_opts} eq 'HASH';
+      delete $self->{resolver_opts}->{Alias};
+      $self->{resolver} = POE::Component::Client::DNS->spawn( Alias => "resolver" . $self->session_id(), %{ $self->{resolver_opts} } );
 
-  $self->{recursive} = POE::Component::Generic->spawn(
-	package => 'Net::DNS::Resolver::Recurse',
-	methods => [ qw(hints query_dorecursion) ],
-  );
+      $self->{recursive} = POE::Component::Generic->spawn(
+	    package => 'Net::DNS::Resolver::Recurse',
+            object_options => [ 'debug', 1 ],
+	    methods => [ qw(hints query_dorecursion) ],
+      );
 
-  $self->{_localhost} = Net::DNS::RR->new('localhost. 0 A 127.0.0.1');
+      $self->{_localhost} = Net::DNS::RR->new('localhost. 0 A 127.0.0.1');
+  }
 
   $self->{session_id} = POE::Session->create(
 	object_states => [ 
@@ -56,7 +58,7 @@ sub _start {
      $self->{alias} = "$self";
   }
 
-  $self->{recursive}->hints( { event => '_hints' } );
+  $self->{recursive}->hints( { event => '_hints' } ) unless $self->{no_clients};
 
   $self->{factory} = POE::Wheel::SocketFactory->new(
 	SocketProtocol => 'udp',
@@ -112,8 +114,10 @@ sub _shutdown {
   $kernel->alarm_remove_all();
   $kernel->alias_remove( $_ ) for $kernel->alias_list( $_[SESSION] );
   delete $self->{dnsrw};
-  $self->{resolver}->shutdown();
-  $self->{recursive}->shutdown();
+  unless ( $self->{no_clients} ) {
+      $self->{resolver}->shutdown();
+      $self->{recursive}->shutdown();
+  }
   $kernel->refcount_decrement( $_->{session}, __PACKAGE__ ) for @{ $self->{_handlers} };
   $kernel->refcount_decrement( $_, __PACKAGE__ ) for keys %{ $self->{_sessions} };
   delete $self->{_handlers};
@@ -237,6 +241,18 @@ sub _dns_incoming {
 	return;
   }
   
+  if ( $self->{no_clients} ) {
+    # Refuse unhandled requests, like an authoritative-only
+    #  BIND server would.
+    $dnsq->header->rcode('REFUSED');
+    $dnsq->header->aa(0);
+    $dnsq->header->ra(0);
+    $dnsq->header->ad(0);
+    $self->_dispatch_log( $dnsq );
+    $self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
+    return;
+  }
+
   if ( $q->qname =~ /^localhost\.*$/i ) {
 	$dnsq->push( answer => $self->{_localhost} );
 	$self->_dispatch_log( $dnsq );
@@ -272,7 +288,7 @@ sub _handled_req {
   $reply->push("authority",  @$auth) if $auth;
   $reply->push("additional", @$add)  if $add;
   if (!defined ($headermask)) {
-	$reply->header->ra(1);
+	$reply->header->ra($self->{no_clients} ? 0 : 1);
 	$reply->header->ad(0);
   } else {
 	$reply->header->aa(1) if $headermask->{'aa'};
@@ -512,6 +528,9 @@ Starts a POE::Component::Server::DNS component session and returns an object. Ta
   "address", which local IP address to listen on.  Default is INADDR_ANY;
   "resolver_opts", a set of options to pass to the POE::Component::Client::DNS constructor;
   "forward_only", be a forwarding only DNS server. Default is 0, be recursive.
+  "no_clients", do not spawn client code (See following notes); 
+
+"no_clients" disables the spawning of client code (PoCo::Client::DNS, Net::DNS::Resolver::Recursive), and doesn't attempt to forward or recurse inbound requests.  Any request not handled by one of your handlers will be C<REFUSED>.  Saves some resources when you intend your server to be authoritative only (as opposed to a general resolver for DNS client software to point at directly).  Additionally, this argument changes the default "Recursion Available" flag in responses to off instead of on.
 
 =back
 
@@ -614,6 +633,8 @@ Rocco Caputo brought L<POE::Component::Client::DNS> to the party.
 Chris 'BinGOs' Williams
 
 Jan-Pieter Cornet
+
+Brandon Black ( who supplied the "no_clients" code ).
 
 =head1 SEE ALSO
 

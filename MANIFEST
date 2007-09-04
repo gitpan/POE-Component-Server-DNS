@@ -21,3 +21,4 @@ t/04_resolve_fo.t
 t/05_handlers.t
 t/06_log.t
 t/07_test_kwalitee.t
+t/08_no_clients.t
