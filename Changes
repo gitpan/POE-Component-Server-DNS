@@ -1,6 +1,10 @@
 POE::Component::Server::DNS
 ===========================
 
+0.09	Tue Sep  4 11:26:53 BST 2007
+	- Changes to pod coverage test to work around a bug on perl-5.9.*
+	reported by Andreas Koenig.
+
 0.08	Tue Sep  4 10:21:13 BST 2007
 	- Applied a large patch from Brandon Black that supplies the 'no_clients'
 	option for disabling forwarding and recursion
