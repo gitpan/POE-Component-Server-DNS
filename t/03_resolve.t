@@ -50,7 +50,7 @@ sub start_tests {
   # Default IN A.  Not found in /etc/hosts.
   $resolver->resolve(
     event   => "response",
-    host    => "google.com",
+    host    => "cock.and.balls",
     context => $request++,
     timeout => 30,
   );
@@ -71,10 +71,12 @@ sub start_tests {
     context => $request++,
     timeout => 0.001,
   );
+  return;
 }
 
 sub got_response {
   my ($request, $response) = @_[ARG0, ARG1];
   ok($request->{context}, "got response $request->{context} for $request->{host}");
   $poe_kernel->post( $server->session_id, 'shutdown' ) if $_[HEAP]->{requests}-- <= 1;
+  return;
 }

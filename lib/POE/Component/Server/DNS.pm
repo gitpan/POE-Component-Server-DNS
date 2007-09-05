@@ -7,7 +7,7 @@ use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.10';
+$VERSION = '0.11';
 
 sub spawn {
   my $package = shift;
@@ -53,7 +53,8 @@ sub _start {
 
   if ( $self->{alias} ) {
      $kernel->alias_set($self->{alias});
-  } else {
+  } 
+  else {
      $kernel->alias_set("$self");
      $self->{alias} = "$self";
   }
@@ -152,7 +153,8 @@ sub add_handler {
   my $args;
   if (ref($_[ARG0]) eq 'HASH') {
 	$args = { %{ $_[ARG0] } };
-  } else {
+  } 
+  else {
 	warn "first parameter must be a ref hash, trying to adjust. "
 		."(fix this to get rid of this message)";
 	$args = { @_[ARG0 .. $#_ ] };
@@ -186,14 +188,16 @@ sub add_handler {
   if ( $@ ) { 
 	warn "The match argument you supplied was fubar, please try harder\n";
 	return;
-  } else {
+  } 
+  else {
 	$args->{match} = $regex;
   }
 
   $args->{session} = $sender unless $args->{session};
   if ( my $ref = $kernel->alias_resolve( $args->{session} ) ) {
 	$args->{session} = $ref->ID();
-  } else {
+  } 
+  else {
 	$args->{session} = $sender->ID();
   }
 
@@ -272,8 +276,9 @@ sub _dns_incoming {
     my $response = $self->{resolver}->resolve( %query );
     $kernel->yield( '_dns_response', $response ) if $response;
   
-  } else {
-    $self->{recursive}->query_dorecursion( { event => '_dns_recursive', data => [ $dnsq->answerfrom, $dnsq->header->id ], }, $q->qname, $q->qtype, $q->qclass );
+  } 
+  else {
+    $self->{recursive}->query_dorecursion( { event => '_dns_recursive', data => [ $dnsq, $dnsq->answerfrom, $dnsq->header->id ], }, $q->qname, $q->qtype, $q->qclass );
   }
 
   undef;
@@ -290,7 +295,8 @@ sub _handled_req {
   if (!defined ($headermask)) {
 	$reply->header->ra($self->{no_clients} ? 0 : 1);
 	$reply->header->ad(0);
-  } else {
+  } 
+  else {
 	$reply->header->aa(1) if $headermask->{'aa'};
 	$reply->header->ra(1) if $headermask->{'ra'};
 	$reply->header->ad(1) if $headermask->{'ad'};
@@ -316,11 +322,17 @@ sub _hints {
 sub _dns_recursive {
   my ($kernel,$self,$data,$response) = @_[KERNEL,OBJECT,ARG0..ARG1];
   return if $data->{error};
-  my ($answerfrom,$id) = @{ $data->{data} };
-  $response->header->id( $id );
-  $response->answerfrom( $answerfrom );
-  $self->_dispatch_log( $response );
-  $self->{dnsrw}->put( $response ) if $self->{dnsrw};
+  my ($dnsq,$answerfrom,$id) = @{ $data->{data} };
+  if ( $response ) {
+    $response->header->id( $id );
+    $response->answerfrom( $answerfrom );
+    $self->_dispatch_log( $response );
+    $self->{dnsrw}->put( $response ) if $self->{dnsrw};
+    return;
+  }
+  $dnsq->header->rcode('NXDOMAIN');
+  $self->_dispatch_log( $dnsq );
+  $self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
   undef;
 }
 
