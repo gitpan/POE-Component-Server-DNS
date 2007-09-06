@@ -1,7 +1,3 @@
-#!/usr/bin/perl -w
-
-# copied from 05_handlers.t
-
 use strict;
 use POE qw(Component::Client::DNS Component::Server::DNS);
 use Net::DNS::RR;

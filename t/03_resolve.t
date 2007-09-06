@@ -1,4 +1,3 @@
-#!/usr/bin/perl -w
 # $Id: 05_api_4.t 56 2006-05-21 20:43:08Z rcaputo $
 # vim: filetype=perl
 
