@@ -1,8 +1,9 @@
 --- 
 abstract: A non-blocking, concurrent DNS server POE component
-author: Chris Williams <chris@bingosnet.co.uk>
+author: 
+  - Chris Williams <chris@bingosnet.co.uk>
 distribution_type: module
-generated_by: Module::Install version 0.67
+generated_by: Module::Install version 0.68
 license: perl
 meta-spec: 
   url: http://module-build.sourceforge.net/META-spec-v1.3.html
@@ -19,4 +20,4 @@ requires:
   POE::Component::Client::DNS: 1
   POE::Component::Generic: 0.091
   Socket: 0
-version: 0.12
+version: 0.13
