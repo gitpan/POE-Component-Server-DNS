@@ -21,6 +21,7 @@ POE::Session->create(
   inline_states  => {
     _start   => \&_start,
     _go      => \&start_tests,
+    _cease   => \&stop_tests,
     _stop    => sub { }, # avoid assert problems
     response => \&got_response,
     log	     => \&got_log,
@@ -51,10 +52,16 @@ sub start_tests {
   return;
 }
 
+sub stop_tests {
+  $poe_kernel->post( $server->session_id, 'shutdown' );
+  return;
+}
+
 sub got_response {
   my ($request, $response) = @_[ARG0, ARG1];
   ok($request->{context}, "got response $request->{context} for $request->{host}");
-  $poe_kernel->post( $server->session_id, 'shutdown' );
+  diag("Waiting 5 seconds\n");
+  $poe_kernel->delay( '_cease', 5 );
   return;
 }
 
