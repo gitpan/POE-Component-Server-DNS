@@ -1,13 +1,14 @@
 package POE::Component::Server::DNS;
 
 use strict;
+use warnings;
 use POE qw(Component::Client::DNS Wheel::ReadWrite Component::Generic Wheel::SocketFactory);
 use Socket;
 use Net::DNS::RR;
 use IO::Socket::INET;
 use vars qw($VERSION);
 
-$VERSION = '0.14';
+$VERSION = '0.16';
 
 sub spawn {
   my $package = shift;
@@ -21,10 +22,6 @@ sub spawn {
   $self->{_handlers} = [ ];
 
   unless ( $self->{no_clients} ) {
-      $self->{resolver_opts} = { } unless $self->{resolver_opts} and ref $self->{resolver_opts} eq 'HASH';
-      delete $self->{resolver_opts}->{Alias};
-      $self->{resolver} = POE::Component::Client::DNS->spawn( Alias => "resolver" . $self->session_id(), %{ $self->{resolver_opts} } );
-
       $self->{recursive} = POE::Component::Generic->spawn(
 	    package => 'Net::DNS::Resolver::Recurse',
             object_options => [ 'debug', 1 ],
@@ -59,7 +56,12 @@ sub _start {
      $self->{alias} = "$self";
   }
 
-  $self->{recursive}->hints( { event => '_hints' } ) unless $self->{no_clients};
+  unless ( $self->{no_clients} ) {
+      $self->{resolver_opts} = { } unless $self->{resolver_opts} and ref $self->{resolver_opts} eq 'HASH';
+      delete $self->{resolver_opts}->{Alias};
+      $self->{resolver} = POE::Component::Client::DNS->spawn( Alias => "resolver" . $self->session_id(), %{ $self->{resolver_opts} } );
+      $self->{recursive}->hints( { event => '_hints' } );
+  }
 
   $self->{factory} = POE::Wheel::SocketFactory->new(
 	SocketProtocol => 'udp',
@@ -147,7 +149,7 @@ sub log_event {
 
 sub add_handler {
   my ($kernel,$self,$sender) = @_[KERNEL,OBJECT,SENDER];
-  my $sender = $_[SENDER]->ID();
+  $sender = $sender->ID();
 
   # Get the arguments
   my $args;
@@ -647,6 +649,12 @@ Chris 'BinGOs' Williams
 Jan-Pieter Cornet
 
 Brandon Black ( who supplied the "no_clients" code ).
+
+=head1 LICENSE
+
+Copyright C<(c)> Chris Williams, Jan-Pieter Cornet and Brandon Black
+
+This module may be used, modified, and distributed under the same terms as Perl itself. Please see the license that came with your Perl distribution for details.
 
 =head1 SEE ALSO
 
