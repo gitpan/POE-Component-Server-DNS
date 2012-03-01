@@ -1,4 +1,9 @@
 package POE::Component::Server::DNS;
+{
+  $POE::Component::Server::DNS::VERSION = '0.22';
+}
+
+#ABSTRACT: A non-blocking, concurrent DNS server POE component
 
 use strict;
 use warnings;
@@ -6,9 +11,6 @@ use POE qw(Component::Client::DNS Wheel::ReadWrite Component::Client::DNS::Recur
 use Socket;
 use Net::DNS::RR;
 use IO::Socket::INET;
-use vars qw($VERSION);
-
-$VERSION = '0.20';
 
 sub spawn {
   my $package = shift;
@@ -26,7 +28,7 @@ sub spawn {
   }
 
   $self->{session_id} = POE::Session->create(
-	object_states => [ 
+	object_states => [
 		$self => { shutdown => '_shutdown', },
 		$self => [ qw(_start _dns_incoming _dns_err _dns_response _dns_recursive add_handler del_handler _handled_req _sock_up _sock_err log_event) ],
 	],
@@ -44,7 +46,7 @@ sub _start {
 
   if ( $self->{alias} ) {
      $kernel->alias_set($self->{alias});
-  } 
+  }
   else {
      $kernel->alias_set("$self");
      $self->{alias} = "$self";
@@ -130,7 +132,7 @@ sub log_event {
 	$kernel->refcount_decrement( $sender => __PACKAGE__ );
 	return;
   }
-  
+
   if ( exists $self->{_sessions}->{ $sender } ) {
 	$self->{_sessions}->{ $sender } = $event;
 	return;
@@ -149,7 +151,7 @@ sub add_handler {
   my $args;
   if (ref($_[ARG0]) eq 'HASH') {
 	$args = { %{ $_[ARG0] } };
-  } 
+  }
   else {
 	warn "first parameter must be a ref hash, trying to adjust. "
 		."(fix this to get rid of this message)";
@@ -181,10 +183,10 @@ sub add_handler {
   my $regex;
   eval { $regex = qr/$args->{match}/ };
 
-  if ( $@ ) { 
+  if ( $@ ) {
 	warn "The match argument you supplied was fubar, please try harder\n";
 	return;
-  } 
+  }
   else {
 	$args->{match} = $regex;
   }
@@ -192,7 +194,7 @@ sub add_handler {
   $args->{session} = $sender unless $args->{session};
   if ( my $ref = $kernel->alias_resolve( $args->{session} ) ) {
 	$args->{session} = $ref->ID();
-  } 
+  }
   else {
 	$args->{session} = $sender->ID();
   }
@@ -207,7 +209,7 @@ sub add_handler {
 sub del_handler {
   my ($kernel,$self,$label) = @_[KERNEL,OBJECT,ARG0];
   return unless $label;
-  
+
   my $i = 0; my $rec;
   for ( @{ $self->{_handlers} } ) {
     if ( $_->{label} eq $label ) {
@@ -240,7 +242,7 @@ sub _dns_incoming {
 			$dnsq->answerfrom );
 	return;
   }
-  
+
   if ( $self->{no_clients} ) {
     # Refuse unhandled requests, like an authoritative-only
     #  BIND server would.
@@ -248,6 +250,7 @@ sub _dns_incoming {
     $dnsq->header->aa(0);
     $dnsq->header->ra(0);
     $dnsq->header->ad(0);
+    my $str = $dnsq->string(); # Doesn't work without this, fucked if I know why.
     $self->_dispatch_log( $dnsq );
     $self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
     return;
@@ -256,7 +259,7 @@ sub _dns_incoming {
   if ( $q->qname =~ /^localhost\.*$/i ) {
 	$dnsq->push( answer => $self->{_localhost} );
 	$self->_dispatch_log( $dnsq );
-  	$self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
+  $self->{dnsrw}->put( $dnsq ) if $self->{dnsrw};
 	return;
   }
 
@@ -265,14 +268,14 @@ sub _dns_incoming {
       class   => $q->qclass,
       type    => $q->qtype,
       host    => $q->qname,
-      context => [ $dnsq->answerfrom, $dnsq->header->id ],   	   
-      event   => '_dns_response', 
+      context => [ $dnsq->answerfrom, $dnsq->header->id ],
+      event   => '_dns_response',
     );
-  
+
     my $response = $self->{resolver}->resolve( %query );
     $kernel->yield( '_dns_response', $response ) if $response;
-  
-  } 
+
+  }
   else {
 #    $self->{recursive}->query_dorecursion( { event => '_dns_recursive', data => [ $dnsq, $dnsq->answerfrom, $dnsq->header->id ], }, $q->qname, $q->qtype, $q->qclass );
     POE::Component::Client::DNS::Recursive->resolve(
@@ -298,13 +301,13 @@ sub _handled_req {
   if (!defined ($headermask)) {
 	$reply->header->ra($self->{no_clients} ? 0 : 1);
 	$reply->header->ad(0);
-  } 
+  }
   else {
 	$reply->header->aa(1) if $headermask->{'aa'};
 	$reply->header->ra(1) if $headermask->{'ra'};
 	$reply->header->ad(1) if $headermask->{'ad'};
   }
-	
+
   $reply->header->qr(1);
   $self->_dispatch_log( $reply );
   $self->{dnsrw}->put( $reply ) if $self->{dnsrw};
@@ -357,6 +360,9 @@ sub _dispatch_log {
 }
 
 package DNS::Driver::SendRecv;
+{
+  $DNS::Driver::SendRecv::VERSION = '0.22';
+}
 
 use strict;
 use POE::Driver;
@@ -406,6 +412,9 @@ sub flush {
 }
 
 package DNS::Filter::UDPDNS;
+{
+  $DNS::Filter::UDPDNS::VERSION = '0.22';
+}
 
 use strict;
 use POE::Filter;
@@ -457,11 +466,18 @@ sub put {
 }
 
 1;
+
+
 __END__
+=pod
 
 =head1 NAME
 
 POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE component
+
+=head1 VERSION
+
+version 0.22
 
 =head1 SYNOPSIS
 
@@ -485,12 +501,12 @@ POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE componen
     $kernel->post( 'dns_server', 'log_event', 'log' );
 
     # register a handler for any foobar.com suffixed domains
-    $kernel->post( 'dns_server', add_handler, 
-	{ 
-	  event => 'handler', 
-	  label => 'foobar', 
+    $kernel->post( 'dns_server', add_handler,
+	{
+	  event => 'handler',
+	  label => 'foobar',
 	  match => 'foobar\.com$',
-        } 
+        }
     );
     undef;
   }
@@ -503,7 +519,7 @@ POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE componen
       my ($ttl, $rdata) = (3600, "10.1.2.3");
       push @ans, Net::DNS::RR->new("$qname $ttl $qclass $qtype $rdata");
       $rcode = "NOERROR";
-    } else { 
+    } else {
       $rcode = "NXDOMAIN";
     }
 
@@ -519,12 +535,12 @@ POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE componen
 
 =head1 DESCRIPTION
 
-POE::Component::Server::DNS is a L<POE> component that implements a DNS server. 
+POE::Component::Server::DNS is a L<POE> component that implements a DNS server.
 
-It uses L<POE::Component::Client::DNS> to handle resolving when configured as 'forward_only' and 
+It uses L<POE::Component::Client::DNS> to handle resolving when configured as 'forward_only' and
 L<Net::DNS::Resolver::Recurse> wrapped by L<POE::Component::Generic> to perform recursion.
 
-One may add handlers to massage and manipulate responses to particular queries which is vaguely modelled 
+One may add handlers to massage and manipulate responses to particular queries which is vaguely modelled
 after L<Net::DNS::Nameserver>.
 
 =head1 CONSTRUCTOR
@@ -540,7 +556,7 @@ Starts a POE::Component::Server::DNS component session and returns an object. Ta
   "address", which local IP address to listen on.  Default is INADDR_ANY;
   "resolver_opts", a set of options to pass to the POE::Component::Client::DNS constructor;
   "forward_only", be a forwarding only DNS server. Default is 0, be recursive.
-  "no_clients", do not spawn client code (See following notes); 
+  "no_clients", do not spawn client code (See following notes);
 
 "no_clients" disables the spawning of client code (PoCo::Client::DNS, Net::DNS::Resolver::Recursive), and doesn't attempt to forward or recurse inbound requests.  Any request not handled by one of your handlers will be C<REFUSED>.  Saves some resources when you intend your server to be authoritative only (as opposed to a general resolver for DNS client software to point at directly).  Additionally, this argument changes the default "Recursion Available" flag in responses to off instead of on.
 
@@ -585,7 +601,6 @@ Accepts a hashref as an argument with the following keys:
   "match", a regex expression ( without // ) to match against the host part of queries, mandatory;
   "session", the session where this handler event should be sent to, defaults to SENDER;
 
-
 See OUTPUT EVENTS for details of what happens when a handler is triggered.
 
 =item del_handler
@@ -616,14 +631,14 @@ with the following paramters:
 
 Do your manipulating then use the callback to fire the response back to the component, returning a
 response code and references to the answer, authority, and additional sections of the response. For advanced
-usage there is an optional argument containing an hashref with the settings for the aa, ra, and ad header bits. 
+usage there is an optional argument containing an hashref with the settings for the aa, ra, and ad header bits.
 The argument is of the form { ad => 1, aa => 0, ra => 1 }.
 
   $callback->( $rcode, \@ans, \@auth, \@add, { aa => 1 } );
 
 =head1 LOG EVENTS
 
-These events are triggered whenever a DNS response is sent to a client. 
+These events are triggered whenever a DNS response is sent to a client.
 
   ARG0, the IP address and port of the requestor, 'IPaddr:port';
   ARG1, the Net::DNS::Packet object;
@@ -632,27 +647,13 @@ See L<Net::DNS::Packet> for details.
 
 =head1 HISTORY
 
-The component's genesis was inspired by Jan-Pieter's 'Fun with POE' talk at YAPC::EU 2006, which lay much of the 
+The component's genesis was inspired by Jan-Pieter's 'Fun with POE' talk at YAPC::EU 2006, which lay much of the
 ground-work code such as the L<POE::Driver> and L<POE::Filter> used internally. BinGOs wrapped it all up in a
 component, added the tests ( borrowed shamelessly from L<POE::Component::Client::DNS>'s testsuite ) and documentation.
 
 Other suggestions as to the API were provided by Ben 'integral' Smith.
 
-Rocco Caputo brought L<POE::Component::Client::DNS> to the party. 
-
-=head1 AUTHORS
-
-Chris 'BinGOs' Williams
-
-Jan-Pieter Cornet
-
-Brandon Black ( who supplied the "no_clients" code ).
-
-=head1 LICENSE
-
-Copyright C<(c)> Chris Williams, Jan-Pieter Cornet and Brandon Black
-
-This module may be used, modified, and distributed under the same terms as Perl itself. Please see the license that came with your Perl distribution for details.
+Rocco Caputo brought L<POE::Component::Client::DNS> to the party.
 
 =head1 SEE ALSO
 
@@ -663,3 +664,31 @@ L<POE::Component::Generic>
 L<Net::DNS>
 
 L<Net::DNS::Packet>
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Chris Williams <chris@bingosnet.co.uk>
+
+=item *
+
+Jan-Pieter Cornet <johnpc@xs4all.nl>
+
+=item *
+
+Brandon Black <blblack@gmail.com>
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2012 by Chris Williams, Jan-Pieter Cornet and Brandon Black.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
+

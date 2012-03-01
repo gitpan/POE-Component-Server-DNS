@@ -2,29 +2,28 @@
 abstract: 'A non-blocking, concurrent DNS server POE component'
 author:
   - 'Chris Williams <chris@bingosnet.co.uk>'
+  - 'Jan-Pieter Cornet <johnpc@xs4all.nl>'
+  - 'Brandon Black <blblack@gmail.com>'
+build_requires:
+  ExtUtils::MakeMaker: 6.59
 configure_requires:
-  ExtUtils::MakeMaker: 6.50
-distribution_type: module
-generated_by: 'Module::Install version 0.81'
+  ExtUtils::MakeMaker: 6.30
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 4.300009, CPAN::Meta::Converter version 2.120530'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
 name: POE-Component-Server-DNS
-no_index:
-  directory:
-    - examples
-    - inc
-    - t
 requires:
   Carp: 0
   Net::DNS: 0.58
   POE: 1.004
-  POE::Component::Client::DNS: 1
-  POE::Component::Client::DNS::Recursive: 0.02
+  POE::Component::Client::DNS: 1.051
+  POE::Component::Client::DNS::Recursive: 1.04
   Socket: 0
-  perl: 5.6.0
+  perl: 5.006
 resources:
-  license: http://dev.perl.org/licenses/
-  repository: git://github.com/bingos/poe-component-server-dns.git
-version: 0.20
+  homepage: https://github.com/bingos/poe-component-server-dns
+  repository: https://github.com/bingos/poe-component-server-dns.git
+version: 0.22
