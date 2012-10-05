@@ -1,6 +1,6 @@
 package POE::Component::Server::DNS;
 {
-  $POE::Component::Server::DNS::VERSION = '0.22';
+  $POE::Component::Server::DNS::VERSION = '0.24';
 }
 
 #ABSTRACT: A non-blocking, concurrent DNS server POE component
@@ -361,7 +361,7 @@ sub _dispatch_log {
 
 package DNS::Driver::SendRecv;
 {
-  $DNS::Driver::SendRecv::VERSION = '0.22';
+  $DNS::Driver::SendRecv::VERSION = '0.24';
 }
 
 use strict;
@@ -413,7 +413,7 @@ sub flush {
 
 package DNS::Filter::UDPDNS;
 {
-  $DNS::Filter::UDPDNS::VERSION = '0.22';
+  $DNS::Filter::UDPDNS::VERSION = '0.24';
 }
 
 use strict;
@@ -467,8 +467,8 @@ sub put {
 
 1;
 
-
 __END__
+
 =pod
 
 =head1 NAME
@@ -477,7 +477,7 @@ POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE componen
 
 =head1 VERSION
 
-version 0.22
+version 0.24
 
 =head1 SYNOPSIS
 
@@ -501,7 +501,7 @@ version 0.22
     $kernel->post( 'dns_server', 'log_event', 'log' );
 
     # register a handler for any foobar.com suffixed domains
-    $kernel->post( 'dns_server', add_handler,
+    $kernel->post( 'dns_server', 'add_handler',
 	{
 	  event => 'handler',
 	  label => 'foobar',
@@ -691,4 +691,3 @@ This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
 
 =cut
-

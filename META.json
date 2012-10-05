@@ -6,7 +6,7 @@
       "Brandon Black <blblack@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 4.300009, CPAN::Meta::Converter version 2.120530",
+   "generated_by" : "Dist::Zilla version 4.300024, CPAN::Meta::Converter version 2.120921",
    "license" : [
       "perl_5"
    ],
@@ -47,6 +47,6 @@
          "web" : "https://github.com/bingos/poe-component-server-dns"
       }
    },
-   "version" : "0.22"
+   "version" : "0.24"
 }
 
