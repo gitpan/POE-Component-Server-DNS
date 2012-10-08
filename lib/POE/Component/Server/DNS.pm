@@ -1,6 +1,6 @@
 package POE::Component::Server::DNS;
 {
-  $POE::Component::Server::DNS::VERSION = '0.24';
+  $POE::Component::Server::DNS::VERSION = '0.26';
 }
 
 #ABSTRACT: A non-blocking, concurrent DNS server POE component
@@ -361,7 +361,7 @@ sub _dispatch_log {
 
 package DNS::Driver::SendRecv;
 {
-  $DNS::Driver::SendRecv::VERSION = '0.24';
+  $DNS::Driver::SendRecv::VERSION = '0.26';
 }
 
 use strict;
@@ -413,7 +413,7 @@ sub flush {
 
 package DNS::Filter::UDPDNS;
 {
-  $DNS::Filter::UDPDNS::VERSION = '0.24';
+  $DNS::Filter::UDPDNS::VERSION = '0.26';
 }
 
 use strict;
@@ -455,6 +455,7 @@ sub put {
     my @ret;
     for my $d ( @$data ) {
         my($inetstr, $port) = split /:/, $d->answerfrom();
+        $d->{buffer} = ''; #sigh
         if ( !defined $port ) {
             warn "answerfrom not set in DNS packet, no destination known\n";
         } else {
@@ -477,7 +478,7 @@ POE::Component::Server::DNS - A non-blocking, concurrent DNS server POE componen
 
 =head1 VERSION
 
-version 0.24
+version 0.26
 
 =head1 SYNOPSIS
 

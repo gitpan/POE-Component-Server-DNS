@@ -29,7 +29,7 @@ my %WriteMakefileArgs = (
     "POE::Component::Client::DNS::Recursive" => "1.04",
     "Socket" => 0
   },
-  "VERSION" => "0.24",
+  "VERSION" => "0.26",
   "test" => {
     "TESTS" => "t/*.t"
   }
