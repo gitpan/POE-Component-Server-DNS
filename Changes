@@ -1,4 +1,16 @@
 ==============================
+2012-12-13 15:01:21 +0000 0.28
+==============================
+
+  commit 1260762f08d760d4d85a2249ade3d4a8cc261e2a
+  Author: Chris 'BinGOs' Williams <chris@bingosnet.co.uk>
+  Date:   Thu Dec 13 15:01:21 2012 +0000
+  
+    Fix the no_client tests as Net::DNS::Resolver behaviour has changed
+
+    Also require a fixed recent version of PoCo-Client-DNS-Recursive 
+
+==============================
 2012-10-08 21:43:22 +0100 0.26
 ==============================
 

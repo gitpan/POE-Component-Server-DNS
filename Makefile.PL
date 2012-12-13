@@ -26,10 +26,10 @@ my %WriteMakefileArgs = (
     "Net::DNS" => "0.58",
     "POE" => "1.004",
     "POE::Component::Client::DNS" => "1.051",
-    "POE::Component::Client::DNS::Recursive" => "1.04",
+    "POE::Component::Client::DNS::Recursive" => "1.06",
     "Socket" => 0
   },
-  "VERSION" => "0.26",
+  "VERSION" => "0.28",
   "test" => {
     "TESTS" => "t/*.t"
   }

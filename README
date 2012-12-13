@@ -3,7 +3,7 @@ NAME
     component
 
 VERSION
-    version 0.26
+    version 0.28
 
 SYNOPSIS
       use strict;
