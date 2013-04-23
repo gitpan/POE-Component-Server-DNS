@@ -3,7 +3,7 @@ NAME
     component
 
 VERSION
-    version 0.28
+    version 0.30
 
 SYNOPSIS
       use strict;
@@ -186,9 +186,13 @@ AUTHORS
 
     *   Brandon Black <blblack@gmail.com>
 
+    *   Richard Harman <richard@richardharman.com>
+
+    *   Stephan Jauernick <stephan@stejau.de>
+
 COPYRIGHT AND LICENSE
-    This software is copyright (c) 2012 by Chris Williams, Jan-Pieter Cornet
-    and Brandon Black.
+    This software is copyright (c) 2013 by Chris Williams, Jan-Pieter
+    Cornet, Brandon Black, Richard Harman and Stephan Jauernick.
 
     This is free software; you can redistribute it and/or modify it under
     the same terms as the Perl 5 programming language system itself.

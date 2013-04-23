@@ -3,10 +3,12 @@
    "author" : [
       "Chris Williams <chris@bingosnet.co.uk>",
       "Jan-Pieter Cornet <johnpc@xs4all.nl>",
-      "Brandon Black <blblack@gmail.com>"
+      "Brandon Black <blblack@gmail.com>",
+      "Richard Harman <richard@richardharman.com>",
+      "Stephan Jauernick <stephan@stejau.de>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 4.300028, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "Dist::Zilla version 4.300033, CPAN::Meta::Converter version 2.130880",
    "license" : [
       "perl_5"
    ],
@@ -40,6 +42,7 @@
             "POE" : "1.004",
             "POE::Component::Client::DNS" : "1.051",
             "POE::Component::Client::DNS::Recursive" : "1.06",
+            "POE::Filter::DNS::TCP" : "0.04",
             "Socket" : "0",
             "perl" : "5.006"
          }
@@ -54,6 +57,6 @@
          "web" : "https://github.com/bingos/poe-component-server-dns"
       }
    },
-   "version" : "0.28"
+   "version" : "0.30"
 }
 
